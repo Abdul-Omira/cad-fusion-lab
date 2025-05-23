@@ -12,6 +12,8 @@ from transformers import CLIPModel, CLIPProcessor
 from typing import Optional, Dict, List, Tuple
 import numpy as np
 from abc import ABC, abstractmethod
+from src.validation.geometric import KCLGenerator
+from src.models.cad_kernel_interface import CADKernelInterface
 
 
 class CADRenderer(ABC):
@@ -23,25 +25,79 @@ class CADRenderer(ABC):
         pass
 
 
-class OccwlRenderer(CADRenderer):
-    """CAD renderer using OCCWL (OpenCASCADE Wrapper Library)."""
-    
-    def __init__(self, image_size: int = 224):
-        self.image_size = image_size
-        
-    def render(self, cad_sequence: List[int]) -> torch.Tensor:
+class OccwlRenderer:
+    """
+    Renders CAD models using a conceptual CAD kernel for visual feedback.
+    """
+    def __init__(self, kcl_generator: KCLGenerator, cad_kernel: CADKernelInterface, image_size: tuple[int, int] = (256, 256)):
         """
-        Render CAD sequence to RGB image.
-        
+        Initializes the OccwlRenderer.
+
         Args:
-            cad_sequence: List of CAD operation tokens
-            
-        Returns:
-            Rendered image tensor of shape (3, H, W)
+            kcl_generator: An instance of KCLGenerator to produce KCL code.
+            cad_kernel: An instance of a CADKernelInterface to execute KCL and render.
+            image_size: A tuple (width, height) for the rendered image.
         """
-        # Placeholder implementation - would use actual OCCWL rendering
-        # For now, return random image for interface compatibility
-        return torch.randn(3, self.image_size, self.image_size)
+        self.kcl_generator = kcl_generator
+        self.cad_kernel = cad_kernel
+        self.image_size = image_size
+        # Placeholder for a real rendering pipeline initialization if needed
+        print(f"OccwlRenderer initialized with image size: {image_size}")
+
+    def render(self, cad_sequence: list[str]) -> torch.Tensor:
+        """
+        Renders a CAD model from a parametric sequence.
+
+        Args:
+            cad_sequence: A list of strings representing the parametric CAD sequence.
+
+        Returns:
+            A torch.Tensor representing the rendered image (batch_size, channels, height, width).
+            Currently returns a placeholder tensor.
+        """
+        # 1. Generate KCL code from the CAD sequence
+        kcl_code = self.kcl_generator.sequence_to_kcl(cad_sequence)
+        print(f"Generated KCL code: \\n{kcl_code}")
+
+        # 2. Execute KCL code using the CAD Kernel to get a 3D model
+        # This is a conceptual step. The actual model representation will depend on the kernel.
+        try:
+            conceptual_model = self.cad_kernel.execute_kcl(kcl_code)
+            print("KCL code executed successfully by CAD Kernel (conceptual).")
+        except Exception as e:
+            print(f"Error executing KCL code with CAD Kernel: {e}")
+            # Return a zero tensor or handle error appropriately
+            return torch.zeros(1, 3, self.image_size[1], self.image_size[0])
+
+        # 3. Render the 3D model to an image tensor using the CAD Kernel
+        # This is also a conceptual step. The actual rendering will depend on the kernel.
+        try:
+            image_tensor = self.cad_kernel.render_model(conceptual_model, self.image_size)
+            print(f"Model rendered to tensor of shape: {image_tensor.shape}")
+        except Exception as e:
+            print(f"Error rendering model with CAD Kernel: {e}")
+            # Return a zero tensor or handle error appropriately
+            return torch.zeros(1, 3, self.image_size[1], self.image_size[0])
+        
+        # For now, let's assume the cad_kernel.render_model returns a correctly shaped tensor.
+        # If it's a placeholder, we might need to adjust.
+        # Ensure the output is (batch_size, channels, height, width)
+        # If image_tensor is (H, W, C), permute it. If it's (C, H, W), unsqueeze it.
+        # This part depends on the actual output of your conceptual render_model.
+        # As a placeholder, we'll continue to return a random tensor of the correct shape.
+        # TODO: Replace with actual image tensor from cad_kernel.render_model
+        # return torch.rand(1, 3, self.image_size[1], self.image_size[0])
+        
+        # Assuming render_model returns a (C, H, W) tensor, add batch dimension
+        if image_tensor.ndim == 3:
+            image_tensor = image_tensor.unsqueeze(0)
+        
+        # Validate shape
+        if image_tensor.shape != (1, 3, self.image_size[1], self.image_size[0]):
+            print(f"Warning: Rendered tensor shape {image_tensor.shape} does not match expected shape (1, 3, {self.image_size[1]}, {self.image_size[0]}). Returning placeholder.")
+            return torch.rand(1, 3, self.image_size[1], self.image_size[0])
+            
+        return image_tensor
 
 
 class VisualReward(nn.Module):
