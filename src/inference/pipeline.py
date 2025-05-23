@@ -12,6 +12,7 @@ import torch
 from transformers import BertTokenizer
 import logging
 import tempfile
+import os
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional, Union, Any
 import json
@@ -136,6 +137,7 @@ class InferencePipeline:
         if output_path is None:
             # Create a temporary file
             fd, output_path = tempfile.mkstemp(suffix=".step")
+            os.close(fd)
         
         # Mock STEP export
         with open(output_path, "w") as f:
@@ -160,6 +162,7 @@ class InferencePipeline:
         if output_path is None:
             # Create a temporary file
             fd, output_path = tempfile.mkstemp(suffix=".gltf")
+            os.close(fd)
         
         # Mock GLTF export - in real implementation would use a conversion library
         gltf_data = {
@@ -250,5 +253,5 @@ def load_model_from_checkpoint(checkpoint_path: str, device: str = "cuda" if tor
     # Load weights
     model.load_state_dict(checkpoint["model_state_dict"])
     model.eval()
-    
+
     return model
