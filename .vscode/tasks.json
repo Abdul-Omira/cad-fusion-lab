@@ -1,0 +1,111 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Install Dependencies",
+      "type": "shell",
+      "command": "pip install -r requirements.txt",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Train Model (Base)",
+      "type": "shell",
+      "command": "python scripts/train.py --config configs/base_config.yaml --output-dir checkpoints --log-dir outputs/logs",
+      "group": "test",
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Train Model (Small)",
+      "type": "shell",
+      "command": "python scripts/train.py --config configs/small_config.yaml --output-dir checkpoints --log-dir outputs/logs",
+      "group": "test",
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Fine-tune with Visual Feedback",
+      "type": "shell",
+      "command": "python scripts/train.py --config configs/base_config.yaml --checkpoint checkpoints/final_model.pt --finetune",
+      "group": "test",
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Run Evaluation",
+      "type": "shell",
+      "command": "python scripts/evaluate.py --model checkpoints/final_model.pt --output-dir outputs/evaluation --visualize",
+      "group": "test",
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Run API Server",
+      "type": "shell",
+      "command": "python src/deployment/server.py --model checkpoints/final_model.pt --config configs/base_config.yaml --output-dir outputs/api",
+      "group": "test",
+      "isBackground": true,
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Process DeepCAD Dataset",
+      "type": "shell",
+      "command": "python -c \"from src.data.preprocessing import DeepCADProcessor; processor = DeepCADProcessor('data/raw', 'data/processed'); processor.process_dataset()\"",
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Generate Example CAD",
+      "type": "shell",
+      "command": "python -c \"from src.inference.pipeline import InferencePipeline; from src.models.text_to_cad import TextToCADModel; model = TextToCADModel(vocab_size=10000); pipeline = InferencePipeline(model); seq = pipeline.generate('Create a rectangular bracket with mounting holes'); print(pipeline.export_kcl(seq))\"",
+      "group": "none",
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Run Tests",
+      "type": "shell",
+      "command": "pytest tests/",
+      "group": {
+        "kind": "test",
+        "isDefault": true
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      },
+      "problemMatcher": []
+    }
+  ]
+}

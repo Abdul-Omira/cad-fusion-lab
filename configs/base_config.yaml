@@ -1,0 +1,74 @@
+# Text-to-CAD Base Configuration
+
+# Model Architecture
+model:
+  vocab_size: 10000
+  text_encoder_name: "bert-base-uncased"
+  d_model: 512
+  nhead: 8
+  num_decoder_layers: 24
+  dim_feedforward: 2048
+  dropout: 0.1
+  max_seq_length: 512
+
+# Training Parameters
+training:
+  batch_size: 64
+  learning_rate: 1.0e-4
+  weight_decay: 0.01
+  max_grad_norm: 1.0
+  warmup_steps: 1000
+  num_epochs: 20
+  save_interval: 1
+  log_interval: 100
+  
+# Visual Feedback Parameters
+visual_feedback:
+  clip_model_name: "openai/clip-vit-base-patch32"
+  clip_weight: 1.0
+  geometry_weight: 0.5
+  chamfer_weight: 0.1
+
+# PPO Fine-tuning
+ppo:
+  enabled: true
+  ppo_epochs: 5
+  clip_ratio: 0.2
+  value_loss_coef: 0.5
+  entropy_coef: 0.01
+  max_grad_norm: 0.5
+  
+# Geometric Validation
+validation:
+  min_thickness: 0.5
+  check_topology: true
+  
+# Data Processing
+data:
+  train_cad_path: "data/processed/train.json"
+  train_text_path: "data/annotations/train.json"
+  val_cad_path: "data/processed/val.json"
+  val_text_path: "data/annotations/val.json"
+  test_cad_path: "data/processed/test.json" 
+  test_text_path: "data/annotations/test.json"
+  
+# Logging & Evaluation
+logging:
+  use_wandb: true
+  wandb_project: "text-to-cad"
+  log_dir: "outputs/logs"
+  
+# Inference
+inference:
+  temperature: 0.8
+  top_k: 50
+  top_p: 0.95
+  max_length: 512
+  
+# Deployment
+deployment:
+  quantization: "FP16"
+  device: "cuda"
+  batch_size: 1
+  timeout: 30.0
+  port: 8000
