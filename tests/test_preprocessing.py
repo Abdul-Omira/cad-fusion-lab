@@ -3,6 +3,8 @@ Tests for data preprocessing pipeline
 """
 
 import pytest
+pytest.importorskip("torch")
+pytest.importorskip("numpy")
 import torch
 import numpy as np
 import json
