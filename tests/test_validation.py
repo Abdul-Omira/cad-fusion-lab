@@ -3,6 +3,7 @@ Tests for geometric validation module
 """
 
 import pytest
+pytest.importorskip("numpy")
 import tempfile
 import json
 import os

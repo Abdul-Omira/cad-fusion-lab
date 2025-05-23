@@ -100,8 +100,9 @@ class CADSequenceDecoder(nn.Module):
         max_seq_length: int = 512
     ):
         super().__init__()
-        
+
         self.d_model = d_model
+        self.max_seq_length = max_seq_length
         self.embedding = nn.Embedding(vocab_size, d_model)
         self.pos_encoding = PositionalEncoding(d_model, max_seq_length)
         
