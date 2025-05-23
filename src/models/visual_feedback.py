@@ -261,9 +261,10 @@ class VisualReward(nn.Module):
 class GeometricValidator(nn.Module):
     """Geometric validation module for CAD sequences."""
     
-    def __init__(self, min_thickness: float = 0.5):
+    def __init__(self, min_thickness: float = 0.5, max_operations: int = 100):
         super().__init__()
         self.min_thickness = min_thickness
+        self.max_operations = max_operations # Max allowed operations for syntax check
     
     def validate_sequence(self, cad_sequence: List[str]) -> Dict[str, bool]: # Changed List[int] to List[str]
         """
@@ -298,24 +299,73 @@ class GeometricValidator(nn.Module):
         results['overall_valid'] = all(results[key] for key in ['valid_syntax', 'valid_thickness', 'valid_topology', 'manufacturable'])
         return results
     
-    def _check_syntax(self, cad_sequence: List[str]) -> bool: # Changed List[int] to List[str]
+    def _check_syntax(self, cad_sequence: List[str]) -> bool:
         """Check if CAD sequence has valid syntax."""
-        # Placeholder implementation
-        # Would check for proper operation ordering, balanced brackets, etc.
-        # For a list of strings, len() still indicates if there are operations.
-        return len(cad_sequence) > 0
-    
-    def _check_wall_thickness(self, cad_sequence: List[str]) -> bool: # Changed List[int] to List[str]
-        """Check if generated geometry meets minimum wall thickness."""
-        # Placeholder implementation
-        # Would parse sequence, generate model, and measure wall thickness
-        # For now, depends only on the sequence existing or some mock logic
+        if not cad_sequence:
+            print("Syntax check: FAIL - Empty sequence")
+            return False
+        if len(cad_sequence) > self.max_operations:
+            print(f"Syntax check: FAIL - Sequence too long ({len(cad_sequence)} > {self.max_operations})")
+            return False
+        
+        # Example: Check for valid operation prefixes (e.g., 'BOX', 'CYLINDER', 'EXTRUDE')
+        # This is highly dependent on the defined KCL vocabulary
+        valid_prefixes = ["BOX", "CYLINDER", "SPHERE", "EXTRUDE", "CUT", "FILLET", "CHAMFER", "UNION", "SUBTRACT"]
+        for op in cad_sequence:
+            if not any(op.upper().startswith(prefix) for prefix in valid_prefixes):
+                print(f"Syntax check: FAIL - Invalid operation found: {op}")
+                return False
+        
+        # Example: Check for balanced parentheses if parameters are like 'BOX(X=10,Y=20,Z=5)'
+        # This is a simplified check. A real parser would be needed for complex KCL.
+        for op in cad_sequence:
+            if op.count('(') != op.count(')'):
+                print(f"Syntax check: FAIL - Unbalanced parentheses in operation: {op}")
+                return False
+        
+        print("Syntax check: PASS")
         return True
     
-    def _check_topology(self, cad_sequence: List[str]) -> bool: # Changed List[int] to List[str]
+    def _check_wall_thickness(self, cad_sequence: List[str]) -> bool:
+        """Check if generated geometry meets minimum wall thickness."""
+        # Placeholder - In a real system, this would involve:
+        # 1. Generating a 3D model from cad_sequence (e.g., using a CAD kernel)
+        # 2. Using a mesh analysis tool to measure wall thickness.
+        # For mock purposes, let's assume certain operations might lead to thin walls.
+        if not cad_sequence: # No operations, no thickness issues
+            return True
+
+        has_cut_operation = any("CUT" in op.upper() for op in cad_sequence)
+        has_shell_operation = any("SHELL" in op.upper() for op in cad_sequence) # Assuming SHELL op exists
+
+        # Mock logic: if many CUT operations or a SHELL operation, it *might* be thin.
+        # This is a very naive placeholder.
+        if cad_sequence and (cad_sequence.count("CUT") > 3 or has_shell_operation):
+            print(f"Wall thickness check: POTENTIAL ISSUE (mock) - Sequence contains multiple CUTs or a SHELL operation. Assumed to pass for now: {self.min_thickness}mm")
+            # return False # In a real scenario, this might be false based on actual analysis
+            return True # For now, always pass if syntax is okay
+        
+        print(f"Wall thickness check: PASS (mock) - Assumed okay: {self.min_thickness}mm")
+        return True
+    
+    def _check_topology(self, cad_sequence: List[str]) -> bool:
         """Check if geometry has valid topology (no self-intersections, etc.)."""
-        # Placeholder implementation
-        # Would parse sequence, generate model, and perform topological analysis
+        # Placeholder - In a real system, this would involve:
+        # 1. Generating a 3D model.
+        # 2. Performing topological analysis (e.g., checking for self-intersections, non-manifold edges).
+        if not cad_sequence:
+            return True
+            
+        # Mock logic: Certain complex sequences or specific operations might risk invalid topology.
+        # For example, too many boolean operations on small features.
+        num_boolean_ops = sum(1 for op in cad_sequence if any(bool_op in op.upper() for bool_op in ["UNION", "SUBTRACT", "INTERSECT", "CUT"]))
+        
+        if num_boolean_ops > 5 and len(cad_sequence) > 10: # Arbitrary thresholds for mock
+            print("Topology check: POTENTIAL ISSUE (mock) - Complex sequence with many boolean operations. Assumed to pass for now.")
+            # return False # In a real scenario
+            return True # For now, always pass
+            
+        print("Topology check: PASS (mock) - Assumed okay.")
         return True
 
 
