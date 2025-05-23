@@ -14,6 +14,7 @@ import numpy as np
 from abc import ABC, abstractmethod
 from src.validation.geometric import KCLGenerator
 from src.models.cad_kernel_interface import CADKernelInterface
+from src.models.mock_cad_kernel import MockCADKernel # Added import
 
 
 class CADRenderer(ABC):
@@ -111,8 +112,11 @@ class VisualReward(nn.Module):
     def __init__(
         self,
         clip_model_name: str = "openai/clip-vit-base-patch32",
-        renderer: Optional[CADRenderer] = None,
-        chamfer_weight: float = 0.1
+        renderer: Optional[OccwlRenderer] = None, # Changed CADRenderer to OccwlRenderer
+        chamfer_weight: float = 0.1,
+        kcl_generator: Optional[KCLGenerator] = None, # Added kcl_generator
+        cad_kernel: Optional[CADKernelInterface] = None, # Added cad_kernel
+        image_size: Tuple[int, int] = (256, 256) # Added image_size for renderer
     ):
         super().__init__()
         
@@ -121,7 +125,17 @@ class VisualReward(nn.Module):
         self.clip_processor = CLIPProcessor.from_pretrained(clip_model_name)
         
         # CAD renderer
-        self.renderer = renderer or OccwlRenderer()
+        if renderer:
+            self.renderer = renderer
+        else:
+            # Initialize KCLGenerator and CADKernel if not provided
+            _kcl_generator = kcl_generator if kcl_generator else KCLGenerator()
+            _cad_kernel = cad_kernel if cad_kernel else MockCADKernel()
+            self.renderer = OccwlRenderer(
+                kcl_generator=_kcl_generator,
+                cad_kernel=_cad_kernel,
+                image_size=image_size
+            )
         
         # Hyperparameters
         self.chamfer_weight = chamfer_weight
@@ -132,40 +146,79 @@ class VisualReward(nn.Module):
     
     def forward(
         self,
-        cad_sequence: List[int],
+        cad_sequence: List[str], # Changed from List[int] to List[str]
         text_prompt: str,
-        ground_truth_sequence: Optional[List[int]] = None
+        ground_truth_sequence: Optional[List[str]] = None # Changed from List[int] to List[str]
     ) -> torch.Tensor:
         """
         Compute visual reward for CAD sequence.
         
         Args:
-            cad_sequence: Generated CAD sequence
+            cad_sequence: Generated CAD sequence (list of strings)
             text_prompt: Original text description
-            ground_truth_sequence: Ground truth CAD sequence (for Chamfer distance)
+            ground_truth_sequence: Ground truth CAD sequence (list of strings)
             
         Returns:
             Reward scalar tensor
         """
         # Render CAD sequence
+        if not all(isinstance(item, str) for item in cad_sequence):
+            # This check might be redundant if type hinting is enforced upstream
+            # or if conversion happens before this point.
+            # For robustness, keeping a check or ensuring conversion.
+            try:
+                # Attempt to convert if it looks like a list of lists of strings (e.g. batched tokens)
+                if all(isinstance(item, list) for item in cad_sequence) and cad_sequence:
+                    cad_sequence = [str(token) for sublist in cad_sequence for token in sublist]
+                else:
+                    cad_sequence = [str(item) for item in cad_sequence]
+            except TypeError:
+                 raise ValueError("cad_sequence must be a list of strings or convertible to it.")
+        
         rendered_image = self.renderer.render(cad_sequence)
         
         # Process inputs for CLIP
+        # CLIPProcessor expects images as PIL Images, numpy arrays (H, W, C), or torch tensors (C, H, W).
+        # rendered_image from OccwlRenderer is (1, C, H, W).
+        if rendered_image.ndim == 4 and rendered_image.shape[0] == 1:
+            clip_image_input = rendered_image.squeeze(0)  # Shape: (C, H, W)
+        elif rendered_image.ndim == 3: # Already (C,H,W)
+            clip_image_input = rendered_image
+        else:
+            print(f"Warning: Unexpected rendered_image shape: {rendered_image.shape}. Using placeholder for CLIP.")
+            # Ensure image_size is available from the renderer instance
+            img_h, img_w = self.renderer.image_size[1], self.renderer.image_size[0]
+            clip_image_input = torch.rand(3, img_h, img_w, device=self.clip_model.device)
+
         inputs = self.clip_processor(
             text=[text_prompt],
-            images=[rendered_image.permute(1, 2, 0).numpy()],
+            images=clip_image_input, # Expects (C, H, W) or list of such, or (H,W,C) numpy
             return_tensors="pt",
             padding=True
         )
         
+        # Move inputs to the same device as the CLIP model
+        inputs = {k: v.to(self.clip_model.device) for k, v in inputs.items()}
+        rendered_image = rendered_image.to(self.clip_model.device) # Ensure rendered_image is also on device for Chamfer
+
         # Compute CLIP score
         outputs = self.clip_model(**inputs)
         clip_score = outputs.logits_per_image[0, 0]  # Text-image similarity
         
         # Compute Chamfer distance if ground truth is available
-        chamfer_distance = 0.0
+        chamfer_distance = torch.tensor(0.0, device=self.clip_model.device) # Ensure tensor is on correct device
         if ground_truth_sequence is not None:
+            if not all(isinstance(item, str) for item in ground_truth_sequence):
+                try:
+                    if all(isinstance(item, list) for item in ground_truth_sequence) and ground_truth_sequence:
+                        ground_truth_sequence = [str(token) for sublist in ground_truth_sequence for token in sublist]
+                    else:
+                        ground_truth_sequence = [str(item) for item in ground_truth_sequence]
+                except TypeError:
+                    raise ValueError("ground_truth_sequence must be a list of strings or convertible to it.")
+
             gt_rendered = self.renderer.render(ground_truth_sequence)
+            gt_rendered = gt_rendered.to(self.clip_model.device)
             chamfer_distance = self._compute_chamfer_distance(rendered_image, gt_rendered)
         
         # Combined reward
@@ -175,23 +228,34 @@ class VisualReward(nn.Module):
     
     def _compute_chamfer_distance(
         self,
-        pred_image: torch.Tensor,
-        gt_image: torch.Tensor
-    ) -> float:
+        pred_image: torch.Tensor, # Expects (1, C, H, W) or (C, H, W)
+        gt_image: torch.Tensor # Expects (1, C, H, W) or (C, H, W)
+    ) -> torch.Tensor: # Return a tensor
         """
         Compute approximate Chamfer distance between rendered images.
         
         Args:
-            pred_image: Predicted rendered image (3, H, W)
-            gt_image: Ground truth rendered image (3, H, W)
+            pred_image: Predicted rendered image tensor.
+            gt_image: Ground truth rendered image tensor.
             
         Returns:
-            Chamfer distance approximation
+            Chamfer distance approximation as a tensor.
         """
         # Simplified Chamfer distance using L2 norm
-        # In practice, would extract 3D points and compute actual Chamfer distance
+        # Ensure images are on the same device and have compatible shapes
+        
+        # If images have a batch dimension of 1, squeeze it
+        if pred_image.ndim == 4 and pred_image.shape[0] == 1:
+            pred_image = pred_image.squeeze(0)
+        if gt_image.ndim == 4 and gt_image.shape[0] == 1:
+            gt_image = gt_image.squeeze(0)
+
+        if pred_image.shape != gt_image.shape:
+            print(f"Warning: Shape mismatch in _compute_chamfer_distance. Pred: {pred_image.shape}, GT: {gt_image.shape}. Returning zero distance.")
+            return torch.tensor(0.0, device=pred_image.device)
+
         diff = torch.norm(pred_image - gt_image, p=2)
-        return diff.item()
+        return diff # Return tensor directly
 
 
 class GeometricValidator(nn.Module):
@@ -201,16 +265,28 @@ class GeometricValidator(nn.Module):
         super().__init__()
         self.min_thickness = min_thickness
     
-    def validate_sequence(self, cad_sequence: List[int]) -> Dict[str, bool]:
+    def validate_sequence(self, cad_sequence: List[str]) -> Dict[str, bool]: # Changed List[int] to List[str]
         """
         Validate geometric constraints of CAD sequence.
         
         Args:
-            cad_sequence: CAD operation sequence
+            cad_sequence: CAD operation sequence (list of strings)
             
         Returns:
             Dictionary of validation results
         """
+        # Ensure cad_sequence is List[str] if it comes from an unknown source
+        # However, VisualFeedbackModule now attempts to ensure this.
+        if not isinstance(cad_sequence, list) or (cad_sequence and not isinstance(cad_sequence[0], str)):
+            print(f"Warning: GeometricValidator received unexpected sequence type: {type(cad_sequence)}. Attempting conversion or using empty.")
+            if isinstance(cad_sequence, list):
+                try:
+                    cad_sequence = [str(item) for item in cad_sequence]
+                except Exception:
+                    cad_sequence = [] # Fallback to empty list if conversion fails
+            else:
+                cad_sequence = []
+
         results = {
             'valid_syntax': self._check_syntax(cad_sequence),
             'valid_thickness': self._check_wall_thickness(cad_sequence),
@@ -218,25 +294,28 @@ class GeometricValidator(nn.Module):
             'manufacturable': True  # Placeholder
         }
         
-        results['overall_valid'] = all(results.values())
+        # Overall validity is true if all individual checks are true
+        results['overall_valid'] = all(results[key] for key in ['valid_syntax', 'valid_thickness', 'valid_topology', 'manufacturable'])
         return results
     
-    def _check_syntax(self, cad_sequence: List[int]) -> bool:
+    def _check_syntax(self, cad_sequence: List[str]) -> bool: # Changed List[int] to List[str]
         """Check if CAD sequence has valid syntax."""
         # Placeholder implementation
         # Would check for proper operation ordering, balanced brackets, etc.
+        # For a list of strings, len() still indicates if there are operations.
         return len(cad_sequence) > 0
     
-    def _check_wall_thickness(self, cad_sequence: List[int]) -> bool:
+    def _check_wall_thickness(self, cad_sequence: List[str]) -> bool: # Changed List[int] to List[str]
         """Check if generated geometry meets minimum wall thickness."""
         # Placeholder implementation
-        # Would extract 3D mesh and measure wall thickness
+        # Would parse sequence, generate model, and measure wall thickness
+        # For now, depends only on the sequence existing or some mock logic
         return True
     
-    def _check_topology(self, cad_sequence: List[int]) -> bool:
+    def _check_topology(self, cad_sequence: List[str]) -> bool: # Changed List[int] to List[str]
         """Check if geometry has valid topology (no self-intersections, etc.)."""
         # Placeholder implementation
-        # Would perform topological analysis of generated mesh
+        # Would parse sequence, generate model, and perform topological analysis
         return True
 
 
@@ -248,14 +327,24 @@ class VisualFeedbackModule(nn.Module):
     def __init__(
         self,
         clip_model_name: str = "openai/clip-vit-base-patch32",
-        renderer: Optional[CADRenderer] = None,
+        renderer: Optional[OccwlRenderer] = None, # Changed CADRenderer to OccwlRenderer
         validator: Optional[GeometricValidator] = None,
         clip_weight: float = 1.0,
-        geometry_weight: float = 0.5
+        geometry_weight: float = 0.5,
+        kcl_generator: Optional[KCLGenerator] = None, # Added
+        cad_kernel: Optional[CADKernelInterface] = None, # Added
+        image_size: Tuple[int, int] = (256, 256) # Added
     ):
         super().__init__()
         
-        self.visual_reward = VisualReward(clip_model_name, renderer)
+        self.visual_reward = VisualReward(
+            clip_model_name=clip_model_name, 
+            renderer=renderer, 
+            chamfer_weight=self.visual_reward.chamfer_weight if hasattr(self.visual_reward, 'chamfer_weight') else 0.1, # Preserve if already set
+            kcl_generator=kcl_generator, 
+            cad_kernel=cad_kernel, 
+            image_size=image_size
+        )
         self.geometric_validator = validator or GeometricValidator()
         
         self.clip_weight = clip_weight
@@ -263,40 +352,51 @@ class VisualFeedbackModule(nn.Module):
     
     def compute_feedback(
         self,
-        cad_sequence: List[int],
+        cad_sequence: List[str],
         text_prompt: str,
-        ground_truth_sequence: Optional[List[int]] = None
+        ground_truth_sequence: Optional[List[str]] = None
     ) -> Dict[str, float]:
         """
         Compute comprehensive feedback for CAD sequence.
         
         Args:
-            cad_sequence: Generated CAD sequence
+            cad_sequence: Generated CAD sequence (list of strings)
             text_prompt: Original text description
-            ground_truth_sequence: Ground truth CAD sequence
+            ground_truth_sequence: Ground truth CAD sequence (list of strings)
             
         Returns:
             Dictionary containing various feedback scores
         """
         # Visual reward from CLIP
-        visual_reward = self.visual_reward(
+        if not all(isinstance(item, str) for item in cad_sequence):
+            try:
+                if all(isinstance(item, list) for item in cad_sequence) and cad_sequence:
+                    cad_sequence = [str(token) for sublist in cad_sequence for token in sublist]
+                else:
+                    cad_sequence = [str(item) for item in cad_sequence]
+            except TypeError:
+                 raise ValueError("cad_sequence must be a list of strings or convertible to it for compute_feedback.")
+        
+        visual_reward_tensor = self.visual_reward(
             cad_sequence, text_prompt, ground_truth_sequence
         )
+        visual_reward_value = visual_reward_tensor.item()
         
         # Geometric validation
+        # GeometricValidator now expects List[str], so direct pass-through is fine.
         validation_results = self.geometric_validator.validate_sequence(cad_sequence)
-        geometry_score = float(validation_results['overall_valid'])
+        geometry_score = float(validation_results.get('overall_valid', 0.0))
         
         # Combined feedback
         total_reward = (
-            self.clip_weight * visual_reward +
+            self.clip_weight * visual_reward_value +
             self.geometry_weight * geometry_score
         )
         
         return {
-            'visual_reward': visual_reward.item(),
+            'visual_reward': visual_reward_value,
             'geometry_score': geometry_score,
-            'total_reward': total_reward.item(),
+            'total_reward': total_reward,
             'validation_details': validation_results
         }
     
