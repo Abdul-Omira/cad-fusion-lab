@@ -78,10 +78,10 @@ class Trainer:
             
             # Forward pass
             loss = self.model.compute_loss(
-                text_input_ids=batch['text_input_ids'],
-                text_attention_mask=batch['text_attention_mask'],
-                cad_sequence=batch['cad_input'],
-                labels=batch['cad_target']
+                text_input_ids=batch['input_ids'],
+                text_attention_mask=batch['attention_mask'],
+                cad_sequence=batch['cad_features'],
+                labels=batch['cad_features']
             )
             
             # Backward pass and optimization
@@ -115,8 +115,8 @@ class Trainer:
                 loss = self.model.compute_loss(
                     text_input_ids=batch['text_input_ids'],
                     text_attention_mask=batch['text_attention_mask'],
-                    cad_sequence=batch['cad_input'],
-                    labels=batch['cad_target']
+                    cad_sequence=batch['cad_features'],
+                    labels=batch['cad_features']
                 )
                 total_loss += loss.item()
         

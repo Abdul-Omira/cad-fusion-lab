@@ -36,7 +36,9 @@ try:
     CAD_KERNEL_AVAILABLE = True
 except ImportError:
     CAD_KERNEL_AVAILABLE = False
-    logging.warning("OpenCascade CAD kernel not available. Using mock validation.")
+    if not hasattr(logging, '_opencascade_warning_shown'):
+        logging.warning("OpenCascade CAD kernel not available. Using mock validation for this session.")
+        logging._opencascade_warning_shown = True
 
 
 @dataclass
