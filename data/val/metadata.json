@@ -1,0 +1,18 @@
+{
+  "total_samples": 15,
+  "categories": [
+    "cube",
+    "cylinder",
+    "prism",
+    "sphere",
+    "nut",
+    "bracket",
+    "cone",
+    "torus",
+    "pyramid"
+  ],
+  "file_formats": [
+    "json"
+  ],
+  "feature_dimension": 128
+}

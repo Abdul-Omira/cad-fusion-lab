@@ -20,6 +20,8 @@ import torch
 import torch.backends.cudnn as cudnn
 import wandb
 from datetime import datetime
+from torch.utils.data import DataLoader
+from transformers import AutoTokenizer
 
 # Add project root to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -28,6 +30,8 @@ from src.models.text_to_cad import TextToCADModel
 from src.models.visual_feedback import VisualFeedbackModule
 from src.data.preprocessing import create_dataloaders
 from src.training.trainer import Trainer
+from src.data.dataset import TextToCADDataset
+from src.utils.logging import setup_logging
 
 
 def parse_args():
@@ -77,102 +81,73 @@ def setup_logging(log_dir):
 
 
 def main():
-    """Main training function."""
-    args = parse_args()
-    
-    # Set random seed
-    torch.manual_seed(args.seed)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(args.seed)
-        cudnn.benchmark = True
-    
-    # Load configuration
-    config = load_config(args.config)
-    
-    # Set up logging
-    log_dir = args.log_dir or config.get("logging", {}).get("log_dir", "outputs/logs")
-    logger = setup_logging(log_dir)
-    logger.info(f"Starting training with config: {config}")
-    
-    # Disable wandb if requested
-    if args.no_wandb:
-        config["logging"]["use_wandb"] = False
-    
-    # Set up output directory
-    output_dir = Path(args.output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
-    
+    # Configuration
+    config = {
+        'learning_rate': 1e-4,
+        'num_epochs': 10,
+        'batch_size': 32,
+        'use_wandb': True,
+        'wandb_project': 'text-to-cad',
+        'save_interval': 1,
+        'log_interval': 100,
+        'warmup_steps': 1000,
+        'max_grad_norm': 1.0,
+        'weight_decay': 0.01
+    }
+
     # Set device
-    device = torch.device(args.device)
-    logger.info(f"Using device: {device}")
-    
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {device}")
+
+    # Initialize tokenizer
+    tokenizer = AutoTokenizer.from_pretrained("gpt2")  # Using GPT-2 tokenizer as base
+
+    # Create datasets
+    data_dir = Path("data/processed")
+    train_dataset = TextToCADDataset(
+        data_dir=data_dir / "train",
+        tokenizer=tokenizer,
+        max_length=512
+    )
+    val_dataset = TextToCADDataset(
+        data_dir=data_dir / "val",
+        tokenizer=tokenizer,
+        max_length=512
+    )
+
     # Create data loaders
-    logger.info("Creating data loaders...")
-    train_loader, val_loader = create_dataloaders(
-        train_cad_path=config["data"]["train_cad_path"],
-        train_text_path=config["data"]["train_text_path"],
-        val_cad_path=config["data"]["val_cad_path"],
-        val_text_path=config["data"]["val_text_path"],
-        batch_size=config["training"]["batch_size"]
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=config['batch_size'],
+        shuffle=True,
+        num_workers=4
     )
-    
+    val_loader = DataLoader(
+        val_dataset,
+        batch_size=config['batch_size'],
+        shuffle=False,
+        num_workers=4
+    )
+
     # Initialize model
-    logger.info("Initializing model...")
     model = TextToCADModel(
-        vocab_size=config["model"]["vocab_size"],
-        text_encoder_name=config["model"]["text_encoder_name"],
-        d_model=config["model"]["d_model"],
-        nhead=config["model"]["nhead"],
-        num_decoder_layers=config["model"]["num_decoder_layers"],
-        dim_feedforward=config["model"]["dim_feedforward"],
-        dropout=config["model"]["dropout"],
-        max_seq_length=config["model"]["max_seq_length"]
+        vocab_size=tokenizer.vocab_size,
+        hidden_size=768,
+        num_layers=12,
+        num_heads=12
     )
-    
-    # Load from checkpoint if specified
-    start_epoch = 0
-    if args.checkpoint:
-        logger.info(f"Loading checkpoint from {args.checkpoint}")
-        checkpoint = torch.load(args.checkpoint, map_location=device)
-        model.load_state_dict(checkpoint["model_state_dict"])
-        start_epoch = checkpoint.get("epoch", 0)
-    
-    # Initialize visual feedback module if finetuning
-    visual_feedback_module = None
-    if args.finetune:
-        logger.info("Initializing visual feedback module for fine-tuning...")
-        visual_feedback_module = VisualFeedbackModule(
-            clip_model_name=config["visual_feedback"]["clip_model_name"],
-            clip_weight=config["visual_feedback"]["clip_weight"],
-            geometry_weight=config["visual_feedback"]["geometry_weight"]
-        )
-    
+
     # Initialize trainer
-    logger.info("Initializing trainer...")
     trainer = Trainer(
         model=model,
         train_loader=train_loader,
         val_loader=val_loader,
         config=config,
-        device=device,
-        visual_feedback_module=visual_feedback_module
+        device=device
     )
-    
+
     # Start training
-    if args.finetune:
-        logger.info("Starting fine-tuning with visual feedback...")
-        trainer.finetune_with_ppo()
-    else:
-        logger.info("Starting training...")
-        trainer.train()
-    
-    # Save final model
-    final_checkpoint_path = output_dir / "final_model.pt"
-    torch.save({
-        "model_state_dict": model.state_dict(),
-        "config": config
-    }, final_checkpoint_path)
-    logger.info(f"Saved final model to {final_checkpoint_path}")
+    trainer.train()
 
 
 if __name__ == "__main__":
