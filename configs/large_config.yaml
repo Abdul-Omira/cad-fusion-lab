@@ -1,90 +1,87 @@
-# Text-to-CAD Large Configuration
-# High-capacity model for production-quality results
+# Large configuration for Text-to-CAD model (high-performance)
 
 # Model Architecture
 model:
-  vocab_size: 10000
-  text_encoder_name: "bert-large-uncased"  # Upgraded from base
-  d_model: 1024                            # Increased from 512
-  nhead: 16                                # Increased from 8
-  num_decoder_layers: 32                   # Increased from 24
-  dim_feedforward: 4096                    # Increased from 2048
+  vocab_size: 20000
+  text_encoder_name: "bert-large-uncased"
+  d_model: 1024
+  nhead: 16
+  num_decoder_layers: 48
+  dim_feedforward: 4096
   dropout: 0.1
-  max_seq_length: 768                      # Increased from 512
-
-# Training Parameters
-training:
-  batch_size: 32                           # Decreased from 64 to fit in memory
-  learning_rate: 5.0e-5                    # Decreased for more stable training
-  weight_decay: 0.01
+  max_seq_length: 1024
   max_grad_norm: 1.0
-  warmup_steps: 2000                       # Increased from 1000
-  num_epochs: 30                           # Increased from 20
-  save_interval: 1
-  log_interval: 50
-  gradient_accumulation_steps: 2           # Added for larger effective batch size
-  
-# Visual Feedback Parameters
-visual_feedback:
-  clip_model_name: "openai/clip-vit-large-patch14"  # Upgraded from base
-  clip_weight: 1.0
-  geometry_weight: 0.5
-  chamfer_weight: 0.1
 
-# PPO Fine-tuning
-ppo:
-  enabled: true
-  ppo_epochs: 5
-  clip_ratio: 0.2
-  value_loss_coef: 0.5
-  entropy_coef: 0.01
-  max_grad_norm: 0.5
-  
-# Geometric Validation
+# Training
+training:
+  batch_size: 64
+  num_epochs: 200
+  learning_rate: 5e-5
+  weight_decay: 0.01
+  warmup_steps: 2000
+  gradient_accumulation_steps: 2
+  max_grad_norm: 1.0
+  early_stopping_patience: 10
+  save_steps: 2000
+  eval_steps: 1000
+  logging_steps: 100
+
+# Generation
+generation:
+  max_length: 1024
+  temperature: 0.7
+  top_k: 100
+  top_p: 0.95
+  num_return_sequences: 3
+  early_stopping: true
+
+# Validation
 validation:
   min_thickness: 0.5
   check_topology: true
-  check_self_intersection: true            # Added for enhanced validation
-  check_watertightness: true               # Added for enhanced validation
-  
-# Data Processing
+  check_self_intersection: true
+  check_watertightness: true
+  mesh_quality: 0.05  # Higher quality mesh for better validation
+
+# Data
 data:
-  train_cad_path: "data/processed/train.json"
-  train_text_path: "data/annotations/train.json"
-  val_cad_path: "data/processed/val.json"
-  val_text_path: "data/annotations/val.json"
-  test_cad_path: "data/processed/test.json" 
-  test_text_path: "data/annotations/test.json"
-  augmentation: true                       # Added data augmentation
-  
-# Logging & Evaluation
+  train_file: "data/processed/train_large.json"
+  val_file: "data/processed/val_large.json"
+  test_file: "data/processed/test_large.json"
+  max_text_length: 256
+  max_cad_length: 1024
+  num_workers: 8
+  pin_memory: true
+
+# Logging
 logging:
-  use_wandb: true
-  wandb_project: "text-to-cad-large"
-  log_dir: "outputs/logs"
-  save_best_only: true                      # Only save best checkpoints
-  
-# Inference
-inference:
-  temperature: 0.7                          # More focused generation
-  top_k: 40
-  top_p: 0.95
-  max_length: 768
-  beam_size: 5                              # Added beam search for better results
-  
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: "logs/training_large.log"
+  wandb:
+    project: "text-to-cad"
+    entity: null
+    tags: ["large", "high-performance"]
+
+# Paths
+paths:
+  output_dir: "outputs/large"
+  checkpoint_dir: "checkpoints/large"
+  log_dir: "logs"
+  temp_dir: "temp"
+
+# Hardware
+hardware:
+  device: "cuda"
+  num_gpus: 4  # Multi-GPU training
+  mixed_precision: true
+  deterministic: false
+
 # Deployment
 deployment:
-  quantization: "FP16"
-  device: "cuda"
-  batch_size: 1
-  timeout: 30.0
+  host: "0.0.0.0"
   port: 8000
-  precision: "mixed"                        # Added mixed precision for better performance
-  num_workers: 4                            # Parallel workers for serving
-  
-# Advanced Features  
-advanced:
-  use_mixed_precision: true                 # Enable mixed precision training
-  parameter_sharing: "layerwise"            # Parameter sharing strategy
-  activation: "gelu"                        # Activation function
-  critical_bits: 12                         # 12-bit precision for critical dimensions
+  workers: 8
+  timeout: 120
+  max_batch_size: 64
+  model_path: "checkpoints/large/final_model.pt"
