@@ -148,12 +148,12 @@ class TestDeepCADProcessor:
         # 8-bit quantization tests
         assert DeepCADProcessor.quantize_param(0.0, bits=8) == 0
         assert DeepCADProcessor.quantize_param(1.0, bits=8) == 255
-        assert DeepCADProcessor.quantize_param(0.5, bits=8) == 127
+        assert DeepCADProcessor.quantize_param(0.5, bits=8) == 128  # 0.5 * 255 = 127.5, rounds to 128
         
         # 12-bit quantization tests
         assert DeepCADProcessor.quantize_param(0.0, bits=12) == 0
         assert DeepCADProcessor.quantize_param(1.0, bits=12) == 4095
-        assert DeepCADProcessor.quantize_param(0.5, bits=12) == 2047
+        assert DeepCADProcessor.quantize_param(0.5, bits=12) == 2048  # 0.5 * 4095 = 2047.5, rounds to 2048
 
 
 class TestTextToCADDataset:

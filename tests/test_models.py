@@ -26,7 +26,8 @@ def model():
         num_decoder_layers=2,
         dim_feedforward=256,
         dropout=0.1,
-        max_seq_length=64
+        max_seq_length=64,
+        offline_mode=True  # Use offline mode for tests
     )
 
 @pytest.fixture
@@ -191,7 +192,7 @@ def test_adaptive_layer():
 
 def test_text_encoder():
     """Test text encoder functionality."""
-    encoder = TextEncoder(model_name="bert-base-uncased", output_dim=512)
+    encoder = TextEncoder(model_name="bert-base-uncased", output_dim=512, offline_mode=True)
     input_ids = torch.randint(0, 1000, (2, 10))
     attention_mask = torch.ones(2, 10)
     
@@ -230,4 +231,12 @@ def test_cad_decoder():
     # Test attention mask
     tgt_mask = decoder.generate_square_subsequent_mask(8)
     assert tgt_mask.shape == (8, 8)
-    assert torch.all(tgt_mask.triu(diagonal=1) == float('-inf'))
+    # Check that diagonal is 0
+    assert torch.all(torch.diag(tgt_mask) == 0.0)
+    # Check that lower triangle is 0 
+    lower_tri = torch.tril(tgt_mask, diagonal=-1)
+    assert torch.all(lower_tri == 0.0)
+    # Check that upper triangle (above diagonal) is -inf
+    for i in range(8):
+        for j in range(i + 1, 8):
+            assert tgt_mask[i, j] == float('-inf')
