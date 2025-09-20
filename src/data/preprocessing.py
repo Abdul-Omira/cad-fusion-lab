@@ -18,6 +18,54 @@ from transformers import BertTokenizer
 import h5py
 from abc import ABC, abstractmethod
 
+logger = logging.getLogger(__name__)
+
+
+class SimpleMockTokenizer:
+    """Simple mock tokenizer for offline use."""
+    
+    def __init__(self):
+        self.vocab_size = 30522  # BERT vocab size
+        self.pad_token = '[PAD]'
+        self.cls_token = '[CLS]'
+        self.sep_token = '[SEP]'
+        self.pad_token_id = 0
+        self.cls_token_id = 101
+        self.sep_token_id = 102
+        
+    def __call__(self, text, max_length=None, padding=True, truncation=True, return_tensors=None):
+        """Simple tokenization by splitting on spaces."""
+        tokens = text.lower().split()
+        
+        # Add special tokens
+        token_ids = [self.cls_token_id]
+        for token in tokens:
+            # Simple hash-based token ID
+            token_id = abs(hash(token)) % (self.vocab_size - 200) + 200
+            token_ids.append(token_id)
+        token_ids.append(self.sep_token_id)
+        
+        if max_length:
+            if len(token_ids) > max_length:
+                token_ids = token_ids[:max_length-1] + [self.sep_token_id]
+            elif padding and len(token_ids) < max_length:
+                token_ids.extend([self.pad_token_id] * (max_length - len(token_ids)))
+        
+        result = {'input_ids': token_ids}
+        
+        # Add attention mask
+        attention_mask = [1] * len(token_ids)
+        if max_length and padding and len(attention_mask) < max_length:
+            attention_mask.extend([0] * (max_length - len(attention_mask)))
+        result['attention_mask'] = attention_mask
+        
+        if return_tensors == 'pt':
+            import torch
+            result['input_ids'] = torch.tensor([result['input_ids']])
+            result['attention_mask'] = torch.tensor([result['attention_mask']])
+            
+        return result
+
 
 @dataclass
 class CADSequence:
@@ -306,7 +354,12 @@ class TextToCADDataset(Dataset):
         max_cad_length: int = 512
     ):
         self.cad_tokenizer = CADTokenizer()
-        self.text_tokenizer = BertTokenizer.from_pretrained(tokenizer_name)
+        try:
+            self.text_tokenizer = BertTokenizer.from_pretrained(tokenizer_name)
+        except (OSError, ImportError, ConnectionError) as e:
+            logger.warning(f"Failed to load BERT tokenizer: {e}. Using simple tokenizer.")
+            # Create a simple mock tokenizer for offline use
+            self.text_tokenizer = SimpleMockTokenizer()
         self.max_text_length = max_text_length
         self.max_cad_length = max_cad_length
         

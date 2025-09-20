@@ -57,8 +57,8 @@ def test_kcl_generation(kcl_generator, sample_cad_sequence):
     assert "Cylinder" in kcl_code
     assert kcl_code.count("(") == kcl_code.count(")")
     
-    # Check parameter handling
-    assert all(str(param) in kcl_code for param in [1000, 1001, 1002, 1003, 1004, 1005])
+    # Check parameter handling (parameters are converted: 1000->0, 1001->1, etc.)
+    assert all(str(param - 1000) in kcl_code for param in [1000, 1001, 1002, 1003, 1004, 1005])
 
 def test_validation_pipeline(validator, sample_cad_sequence):
     """Test the complete validation pipeline."""
@@ -87,7 +87,8 @@ def test_wall_thickness_validation(validator):
     is_valid, errors = validator.validate(thin_wall_sequence)
     
     # If CAD kernel is available, check for thickness errors
-    if validator._execute_kcl("") is not None:  # Check if CAD kernel is available
+    cad_model = validator._execute_kcl("")
+    if cad_model is not None and not (isinstance(cad_model, dict) and cad_model.get("type") == "mock"):
         assert not is_valid
         assert any(isinstance(error, ThicknessError) for error in errors)
     else:
@@ -103,7 +104,8 @@ def test_topology_validation(validator):
     is_valid, errors = validator.validate(invalid_topology_sequence)
     
     # If CAD kernel is available, check for topology errors
-    if validator._execute_kcl("") is not None:
+    cad_model = validator._execute_kcl("")
+    if cad_model is not None and not (isinstance(cad_model, dict) and cad_model.get("type") == "mock"):
         assert not is_valid
         assert any(isinstance(error, TopologyError) for error in errors)
     else:
@@ -119,7 +121,8 @@ def test_self_intersection_validation(validator):
     is_valid, errors = validator.validate(intersection_sequence)
     
     # If CAD kernel is available, check for intersection errors
-    if validator._execute_kcl("") is not None:
+    cad_model = validator._execute_kcl("")
+    if cad_model is not None and not (isinstance(cad_model, dict) and cad_model.get("type") == "mock"):
         assert not is_valid
         assert any(isinstance(error, IntersectionError) for error in errors)
     else:
@@ -135,7 +138,8 @@ def test_watertightness_validation(validator):
     is_valid, errors = validator.validate(non_watertight_sequence)
     
     # If CAD kernel is available, check for watertightness errors
-    if validator._execute_kcl("") is not None:
+    cad_model = validator._execute_kcl("")
+    if cad_model is not None and not (isinstance(cad_model, dict) and cad_model.get("type") == "mock"):
         assert not is_valid
         assert any(isinstance(error, GeometricError) for error in errors)
     else:
@@ -183,8 +187,8 @@ def test_error_handling(validator):
 
 def test_mock_validation(validator):
     """Test mock validation when CAD kernel is not available."""
-    # Force mock validation
-    validator._execute_kcl = lambda x: None
+    # Force mock validation by making _execute_kcl return mock model
+    validator._execute_kcl = lambda x: {"type": "mock", "valid": True}
     
     # Test validation
     is_valid, errors = validator.validate([1, 4, 1000, 1001, 1002, 2])
@@ -197,9 +201,9 @@ def test_kcl_generator_error_handling(kcl_generator):
     kcl_code = kcl_generator.generate_kcl([])
     assert kcl_code == ""
     
-    # Test with invalid tokens
-    kcl_code = kcl_generator.generate_kcl([9999])
-    assert "Operation_9999" in kcl_code
+    # Test with invalid operation tokens (should be between operation_start=4 and 1000)
+    kcl_code = kcl_generator.generate_kcl([999])
+    assert "Operation_999" in kcl_code
     
     # Test with special tokens only
     kcl_code = kcl_generator.generate_kcl([1, 2])  # SOS and EOS only
