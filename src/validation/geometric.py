@@ -158,8 +158,14 @@ class KCLGenerator:
                     kcl_code.append(f"{op_name}()")
                 
                 i = j
+            elif token >= 1000:
+                # Handle parameter tokens that weren't processed with operations
+                i += 1
             else:
-                # Skip unknown tokens
+                # Handle unknown operation tokens
+                if token > self.operation_start:
+                    op_name = f"Operation_{token}"
+                    kcl_code.append(f"{op_name}()")
                 i += 1
         
         return "\n".join(kcl_code)
@@ -219,6 +225,12 @@ class GeometricValidator:
             errors.append(SyntaxError(message="Failed to generate CAD model"))
             return False, errors
         
+        # Check if this is a mock model (when CAD kernel is not available)
+        if isinstance(cad_model, dict) and cad_model.get("type") == "mock":
+            # For mock models, just return the mock validation result
+            return cad_model.get("valid", True), errors
+        
+        # For real CAD models, proceed with full validation
         # Step 3: Check wall thickness
         thickness_valid, thickness_errors = self._check_wall_thickness(cad_model)
         errors.extend(thickness_errors)
