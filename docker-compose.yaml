@@ -1,0 +1,146 @@
+version: '3.8'
+
+services:
+  # Main Text-to-CAD API Service
+  cad-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: cad-fusion-lab:latest
+    container_name: cad-fusion-api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      # Model configuration
+      - MODEL_PATH=/app/checkpoints/final_model.pt
+      - CONFIG_PATH=/app/configs/base_config.yaml
+      - DEVICE=${DEVICE:-cpu}
+      - OUTPUT_DIR=/app/outputs/api
+
+      # Security
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-change-me-in-production}
+      - ACCESS_TOKEN_EXPIRE_MINUTES=60
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:8000}
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS:-localhost,127.0.0.1,cad-api}
+
+      # API Keys (comma-separated)
+      - VALID_API_KEYS=${VALID_API_KEYS:-}
+
+      # Redis connection
+      - REDIS_URL=redis://redis:6379/0
+
+      # Logging
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+
+      # Monitoring
+      - PROMETHEUS_ENABLED=true
+    volumes:
+      - ./outputs:/app/outputs
+      - ./checkpoints:/app/checkpoints:ro
+      - ./configs:/app/configs:ro
+    depends_on:
+      - redis
+    networks:
+      - cad-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 8G
+        reservations:
+          cpus: '2'
+          memory: 4G
+
+  # Redis for caching and rate limiting
+  redis:
+    image: redis:7-alpine
+    container_name: cad-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis-data:/data
+    networks:
+      - cad-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  # Prometheus for metrics collection
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: cad-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+    networks:
+      - cad-network
+    depends_on:
+      - cad-api
+
+  # Grafana for visualization
+  grafana:
+    image: grafana/grafana:latest
+    container_name: cad-grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_ROOT_URL=http://localhost:3000
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    networks:
+      - cad-network
+    depends_on:
+      - prometheus
+
+  # Nginx reverse proxy (optional, for production)
+  nginx:
+    image: nginx:alpine
+    container_name: cad-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - cad-api
+    networks:
+      - cad-network
+    profiles:
+      - production
+
+volumes:
+  redis-data:
+    driver: local
+  prometheus-data:
+    driver: local
+  grafana-data:
+    driver: local
+
+networks:
+  cad-network:
+    driver: bridge

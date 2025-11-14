@@ -46,3 +46,23 @@ htmlcov/
 # HuggingFace cache
 .cache/
 transformers_cache/
+
+# Large installers and binaries
+*.exe
+*.msi
+*.dmg
+*.deb
+*.rpm
+
+# Model checkpoints (use Git LFS for large files)
+checkpoints/
+*.ckpt
+*.bin
+*.safetensors
+
+# Environment files with secrets
+.env
+.env.local
+.env.*.local
+credentials.json
+secrets.yaml

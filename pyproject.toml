@@ -1,0 +1,287 @@
+[build-system]
+requires = ["setuptools>=65.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cad-fusion-lab"
+version = "1.0.0"
+description = "A state-of-the-art AI model that converts natural language descriptions into parametric CAD files"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "OMIRA Technologies", email = "info@omira.tech"}
+]
+maintainers = [
+    {name = "Abdul Omira", email = "info@omira.tech"}
+]
+keywords = [
+    "cad", "text-to-cad", "machine-learning", "deep-learning",
+    "transformer", "generative-ai", "3d-modeling", "parametric-design"
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Scientific/Engineering :: CAD/CAM",
+]
+requires-python = ">=3.9"
+
+dependencies = [
+    # Core ML/AI Dependencies
+    "torch>=2.0.0",
+    "torchvision>=0.15.0",
+    "transformers>=4.30.0",
+    "datasets>=2.12.0",
+    "accelerate>=0.20.0",
+    "huggingface-hub>=0.15.0",
+    "einops>=0.6.0",
+    "bitsandbytes>=0.39.0",
+
+    # Geometric Processing
+    "open3d>=0.17.0",
+    "trimesh>=3.22.0",
+    "numpy>=1.24.0,<2.0.0",
+    "scipy>=1.10.0",
+    "pyquaternion>=0.9.9",
+
+    # CAD Processing
+    "cadquery>=2.3.0",
+    "OCP>=7.7.0",
+
+    # Computer Vision
+    "opencv-python>=4.7.0",
+    "Pillow>=9.5.0",
+    "matplotlib>=3.7.0",
+    "imageio>=2.27.0",
+
+    # Multi-modal Models
+    "clip @ git+https://github.com/openai/CLIP.git",
+    "timm>=0.9.2",
+
+    # Evaluation and Metrics
+    "scikit-learn>=1.2.0",
+    "wandb>=0.15.0",
+    "tensorboard>=2.13.0",
+    "torchmetrics>=1.0.0",
+    "pynvml>=11.5.0",
+    "seaborn>=0.12.0",
+
+    # Deployment
+    "fastapi>=0.100.0",
+    "uvicorn[standard]>=0.22.0",
+    "pydantic>=2.0.0",
+    "python-multipart>=0.0.6",
+    "httpx>=0.24.0",
+    "gunicorn>=21.0.0",
+    "slowapi>=0.1.9",
+    "python-jose[cryptography]>=3.3.0",
+    "passlib[bcrypt]>=1.7.4",
+    "python-dotenv>=1.0.0",
+
+    # CAD Rendering and Validation
+    "meshio>=5.3.0",
+    "vtk>=9.2.0",
+    "pyrender>=0.1.45",
+    "pygltflib>=1.16.0",
+
+    # Optimization and Training
+    "optuna>=3.2.0",
+    "ray[tune]>=2.5.0",
+    "tqdm>=4.65.0",
+    "joblib>=1.2.0",
+    "psutil>=5.9.0",
+
+    # Utilities
+    "PyYAML>=6.0",
+    "requests>=2.30.0",
+    "click>=8.1.3",
+    "rich>=13.3.5",
+    "typer>=0.9.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.3.0",
+    "pytest-cov>=4.1.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-mock>=3.11.1",
+    "black>=23.3.0",
+    "flake8>=6.0.0",
+    "isort>=5.12.0",
+    "mypy>=1.3.0",
+    "pre-commit>=3.3.0",
+    "jupyter>=1.0.0",
+    "ipywidgets>=8.0.0",
+    "nbdime>=3.2.0",
+]
+
+data-collection = [
+    "beautifulsoup4>=4.12.0",
+    "aiohttp>=3.8.0",
+    "trafilatura>=1.6.1",
+    "nltk>=3.8.1",
+    "spacy>=3.7.2",
+    "textblob>=0.17.1",
+    "sentence-transformers>=2.2.2",
+    "nlpaug>=1.1.11",
+    "textaugment>=1.3.0",
+    "albumentations>=1.3.1",
+    "imgaug>=0.4.0",
+    "pytesseract>=0.3.10",
+    "easyocr>=1.7.0",
+]
+
+monitoring = [
+    "prometheus-client>=0.17.0",
+    "opentelemetry-api>=1.18.0",
+    "opentelemetry-sdk>=1.18.0",
+    "opentelemetry-instrumentation-fastapi>=0.39b0",
+    "sentry-sdk[fastapi]>=1.28.0",
+]
+
+deployment = [
+    "redis>=4.6.0",
+    "celery>=5.3.0",
+    "docker>=6.1.0",
+]
+
+all = [
+    "cad-fusion-lab[dev,data-collection,monitoring,deployment]",
+]
+
+[project.urls]
+Homepage = "https://github.com/Abdul-Omira/cad-fusion-lab"
+Repository = "https://github.com/Abdul-Omira/cad-fusion-lab"
+Documentation = "https://github.com/Abdul-Omira/cad-fusion-lab#readme"
+"Bug Tracker" = "https://github.com/Abdul-Omira/cad-fusion-lab/issues"
+
+[project.scripts]
+cad-fusion = "src.cli:main"
+train-cad-model = "scripts.train:main"
+evaluate-cad-model = "scripts.evaluate:main"
+cad-server = "src.deployment.server:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*", "scripts*"]
+exclude = ["tests*", "docs*", "outputs*", "data*"]
+
+[tool.setuptools.package-data]
+cad-fusion-lab = ["configs/*.yaml"]
+
+# Black configuration
+[tool.black]
+line-length = 100
+target-version = ['py39', 'py310', 'py311']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+  | data
+  | outputs
+)/
+'''
+
+# isort configuration
+[tool.isort]
+profile = "black"
+line_length = 100
+multi_line_output = 3
+include_trailing_comma = true
+force_grid_wrap = 0
+use_parentheses = true
+ensure_newline_before_comments = true
+skip_glob = ["data/*", "outputs/*", "*.ipynb"]
+
+# mypy configuration
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+check_untyped_defs = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+
+[[tool.mypy.overrides]]
+module = [
+    "trimesh.*",
+    "open3d.*",
+    "cadquery.*",
+    "OCP.*",
+    "clip.*",
+    "wandb.*",
+    "pyrender.*",
+]
+ignore_missing_imports = true
+
+# pytest configuration
+[tool.pytest.ini_options]
+minversion = "7.0"
+addopts = [
+    "-ra",
+    "-q",
+    "--strict-markers",
+    "--strict-config",
+    "--cov=src",
+    "--cov-report=term-missing",
+    "--cov-report=html",
+    "--cov-report=xml",
+]
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+    "unit: marks tests as unit tests",
+    "gpu: marks tests that require GPU",
+]
+
+# coverage configuration
+[tool.coverage.run]
+source = ["src"]
+omit = [
+    "*/tests/*",
+    "*/test_*.py",
+    "*/__pycache__/*",
+    "*/site-packages/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "@abstractmethod",
+]
+
+# flake8 configuration (in setup.cfg since flake8 doesn't support pyproject.toml yet)
+# See setup.cfg for flake8 configuration
+
+[tool.bandit]
+exclude_dirs = ["tests", "data", "outputs"]
+skips = ["B101", "B601"]
