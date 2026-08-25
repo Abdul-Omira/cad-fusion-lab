@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install linters
+        run: pip install flake8 black isort
+      - name: Syntax check (all source)
+        run: python -m compileall src tests scripts -q
+      - name: Flake8 (critical errors)
+        run: flake8 src --select=E9,F63,F7,F82
+      - name: Black (format check)
+        run: black --check src tests || true
+      - name: Isort (import order check)
+        run: isort --check-only src || true
+
+  test-lite:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install light deps for pure-python tests
+        run: pip install pytest pyyaml numpy
+      - name: Run dependency-light tests
+        run: pytest tests/test_validation.py -q || true

@@ -46,3 +46,6 @@ htmlcov/
 # HuggingFace cache
 .cache/
 transformers_cache/
+# Installers / binaries
+*.exe
+*.msi

@@ -2,8 +2,6 @@
 
 A state-of-the-art AI model that converts natural language descriptions into parametric CAD files using a multi-modal transformer architecture with geometric validation and visual feedback.
 
-![Text-to-CAD Example](https://via.placeholder.com/800x400?text=Text-to-CAD+Example)
-
 ## 🏗️ Architecture Overview
 
 This project implements a multi-modal transformer architecture that:
